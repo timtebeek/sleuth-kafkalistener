@@ -7,20 +7,22 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.concurrent.ListenableFuture;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @RunWith(SpringRunner.class)
-@SpringBootTest
-@EmbeddedKafka(topics = Constants.TOPIC)
+@SpringBootTest(properties = "spring.sleuth.propagation-keys=corporate_trace_id")
+@EmbeddedKafka(topics = Constants.TOPIC1)
 @Slf4j
 public class TracingKafkaListenerTest {
     private static final String X_B3_TRACE_ID = "X-B3-TraceId";
@@ -33,7 +35,7 @@ public class TracingKafkaListenerTest {
 
     @Test
     public void testSingleRecordCorrelation() throws Exception {
-        ListenableFuture<SendResult<String, String>> sent = template.send(Constants.TOPIC, "foo");
+        ListenableFuture<SendResult<String, String>> sent = template.send(Constants.TOPIC1, "foo");
         SendResult<String, String> result = sent.get();
 
         // Extract producer details
@@ -57,19 +59,33 @@ public class TracingKafkaListenerTest {
     }
 
     @Test
+    public void testHeadersNotStripped() throws Exception {
+        String corporateTraceId = UUID.randomUUID().toString();
+        Message<String> message = MessageBuilder
+                .withPayload("bar")
+                .setHeader(KafkaHeaders.TOPIC, Constants.TOPIC2)
+                .setHeader("corporate_trace_id", corporateTraceId)
+                .build();
+        template.send(message);
+        // Listener logs: org.springframework.messaging.MessageHandlingException: Missing header 'corporate_trace_id' for method parameter type [class java.lang.String]
+        // But when `spring.sleuth.propagation-keys=corporate_trace_id` is removed, the below works again
+        await().untilAsserted(() -> assertThat(listener.getMessageTraces().get("bar")).isNotNull()); // Never reached
+        TraceDiagnostics traceDiagnostics = listener.getMessageTraces().get("bar");
+        assertThat(traceDiagnostics.getCorporateTraceId()).isEqualTo(corporateTraceId);
+    }
+
+    @Test
     public void testMultiRecordsAllUniqueTraceIds() throws Exception {
         int numberOfMessagesToSend = 100;
         Map<String, String> sentMessageTraceIds = new HashMap<>();
         for (int i = 0; i < numberOfMessagesToSend; i++) {
             String message = "message-" + i;
-            ListenableFuture<SendResult<String, String>> sent = template.send(Constants.TOPIC, message);
+            ListenableFuture<SendResult<String, String>> sent = template.send(Constants.TOPIC1, message);
             SendResult<String, String> result = sent.get();
 
             Headers headers = result.getProducerRecord().headers();
             String producerTraceId = new String(headers.lastHeader(X_B3_TRACE_ID).value());
             sentMessageTraceIds.put(message, producerTraceId);
-
-            Thread.sleep(3);
         }
 
         // Wait until received, stored and retrieved
@@ -83,7 +99,8 @@ public class TracingKafkaListenerTest {
         }
 
         // Verify all unique
-        long count = receivedMessageTraces.values().stream().map(TraceDiagnostics::getSpanHeaders).map(it -> it.get(X_B3_TRACE_ID)).distinct().count();
+        long count = receivedMessageTraces.values().stream().map(TraceDiagnostics::getSpanHeaders).map(it -> it.get(X_B3_TRACE_ID))
+                .distinct().count();
         assertThat(count).isEqualTo(numberOfMessagesToSend);
     }
 }

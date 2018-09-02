@@ -2,6 +2,7 @@ package com.github.timtebeek.sleuth.kafkalistener;
 
 public class Constants {
 
-    public static final String TOPIC = "demo-topic";
+    public static final String TOPIC1 = "demo-topic1";
+    public static final String TOPIC2 = "demo-topic2";
 
 }
