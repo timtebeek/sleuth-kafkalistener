@@ -2,6 +2,7 @@ package com.github.timtebeek.sleuth.kafkalistener;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.header.Headers;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,14 +16,16 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.concurrent.ListenableFuture;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(properties = "spring.sleuth.propagation-keys=corporate_trace_id")
-@EmbeddedKafka(topics = Constants.TOPIC1)
+@EmbeddedKafka
 @Slf4j
 public class TracingKafkaListenerTest {
     private static final String X_B3_TRACE_ID = "X-B3-TraceId";
@@ -32,6 +35,11 @@ public class TracingKafkaListenerTest {
     private KafkaTemplate<String, String> template;
     @Autowired
     private TracingKafkaListener listener;
+
+    @Before
+    public void clear() {
+        listener.getMessageTraces().clear();
+    }
 
     @Test
     public void testSingleRecordCorrelation() throws Exception {
@@ -80,7 +88,7 @@ public class TracingKafkaListenerTest {
         Map<String, String> sentMessageTraceIds = new HashMap<>();
         for (int i = 0; i < numberOfMessagesToSend; i++) {
             String message = "message-" + i;
-            ListenableFuture<SendResult<String, String>> sent = template.send(Constants.TOPIC1, message);
+            ListenableFuture<SendResult<String, String>> sent = template.send(Constants.TOPIC3, message);
             SendResult<String, String> result = sent.get();
 
             Headers headers = result.getProducerRecord().headers();
