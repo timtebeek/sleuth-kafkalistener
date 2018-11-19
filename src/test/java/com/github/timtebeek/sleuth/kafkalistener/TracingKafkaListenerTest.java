@@ -7,6 +7,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.RequestEntity;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.kafka.support.SendResult;
@@ -16,6 +19,7 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.concurrent.ListenableFuture;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -24,10 +28,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @RunWith(SpringRunner.class)
-@SpringBootTest(properties = "spring.sleuth.propagation-keys=corporate_trace_id")
+@SpringBootTest(properties = "spring.sleuth.propagation-keys=corporate_trace_id", webEnvironment = WebEnvironment.RANDOM_PORT)
 @EmbeddedKafka
 @Slf4j
 public class TracingKafkaListenerTest {
+    private static final String CORPORATE_TRACE_ID = "corporate_trace_id";
     private static final String X_B3_TRACE_ID = "X-B3-TraceId";
     private static final String X_B3_SPAN_ID = "X-B3-SpanId";
 
@@ -35,6 +40,8 @@ public class TracingKafkaListenerTest {
     private KafkaTemplate<String, String> template;
     @Autowired
     private TracingKafkaListener listener;
+    @Autowired
+    private TestRestTemplate restTemplate;
 
     @Before
     public void clear() {
@@ -72,12 +79,21 @@ public class TracingKafkaListenerTest {
         Message<String> message = MessageBuilder
                 .withPayload("bar")
                 .setHeader(KafkaHeaders.TOPIC, Constants.TOPIC2)
-                .setHeader("corporate_trace_id", corporateTraceId)
+                .setHeader(CORPORATE_TRACE_ID, corporateTraceId)
                 .build();
         template.send(message);
-        // Listener logs: org.springframework.messaging.MessageHandlingException: Missing header 'corporate_trace_id' for method parameter type [class java.lang.String]
-        // But when `spring.sleuth.propagation-keys=corporate_trace_id` is removed, the below works again
-        await().untilAsserted(() -> assertThat(listener.getMessageTraces().get("bar")).isNotNull()); // Never reached
+        await().untilAsserted(() -> assertThat(listener.getMessageTraces().get("bar")).isNotNull());
+        TraceDiagnostics traceDiagnostics = listener.getMessageTraces().get("bar");
+        assertThat(traceDiagnostics.getCorporateTraceId()).isEqualTo(corporateTraceId);
+    }
+
+    @Test
+    public void testWebHeadersNotMangled() throws Exception {
+        String corporateTraceId = UUID.randomUUID().toString();
+        restTemplate.exchange(RequestEntity.get(URI.create("/trace"))
+                .header(CORPORATE_TRACE_ID, corporateTraceId)
+                .build(), Void.class);
+        await().untilAsserted(() -> assertThat(listener.getMessageTraces().get("bar")).isNotNull());
         TraceDiagnostics traceDiagnostics = listener.getMessageTraces().get("bar");
         assertThat(traceDiagnostics.getCorporateTraceId()).isEqualTo(corporateTraceId);
     }
