@@ -1,6 +1,7 @@
 package com.github.timtebeek.sleuth.kafkalistener;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -94,7 +95,9 @@ public class TracingKafkaListenerTest {
 		restTemplate.exchange(RequestEntity.get(URI.create("/trace"))
 				.header(CORPORATE_TRACE_ID, corporateTraceId)
 				.build(), Void.class);
-		await().untilAsserted(() -> assertThat(listener.getMessageTraces().get("baz")).isNotNull());
+		await()
+				.atMost(Duration.ofSeconds(20))
+				.untilAsserted(() -> assertThat(listener.getMessageTraces().get("baz")).isNotNull());
 		TraceDiagnostics traceDiagnostics = listener.getMessageTraces().get("baz");
 		assertThat(traceDiagnostics.getCorporateTraceId()).isEqualTo(corporateTraceId);
 	}
