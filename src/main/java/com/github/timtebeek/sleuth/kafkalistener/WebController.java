@@ -14,17 +14,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @Slf4j
 public class WebController {
-    private final KafkaTemplate<String, String> template;
+	private final KafkaTemplate<String, String> template;
 
-    @GetMapping(value = "/trace")
-    public void trace(@RequestHeader("corporate_trace_id") String corporateTraceId) {
-        log.info("Received web request with: {}", corporateTraceId);
-        Message<String> message = MessageBuilder
-                .withPayload("baz: " + corporateTraceId)
-                .setHeader(KafkaHeaders.TOPIC, Constants.TOPIC2)
-                .build();
-        log.info("Sending: {}", message);
-        template.send(message);
-    }
+	@GetMapping(value = "/trace")
+	public void trace(@RequestHeader("corporate_trace_id") String corporateTraceId) {
+		log.info("Received web request with: {}", corporateTraceId);
+		Message<String> message = MessageBuilder
+				.withPayload("baz")
+				.setHeader(KafkaHeaders.TOPIC, Constants.TOPIC2)
+				.build();
+		log.info("Sending: {}", message);
+		template.send(message);
+	}
 
 }
