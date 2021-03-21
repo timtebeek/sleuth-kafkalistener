@@ -8,9 +8,8 @@ import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.header.Headers;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -21,14 +20,12 @@ import org.springframework.kafka.support.SendResult;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.concurrent.ListenableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 
-@RunWith(SpringRunner.class)
 @SpringBootTest(webEnvironment = RANDOM_PORT)
 @EmbeddedKafka(topics = { Constants.TOPIC1, Constants.TOPIC2, Constants.TOPIC3 })
 @Slf4j
@@ -44,13 +41,13 @@ public class TracingKafkaListenerTest {
 	@Autowired
 	private TestRestTemplate restTemplate;
 
-	@Before
-	public void clear() {
+	@BeforeEach
+	void clear() {
 		listener.getMessageSpanHeaders().clear();
 	}
 
 	@Test
-	public void testSingleRecordCorrelation() throws Exception {
+	void testSingleRecordCorrelation() throws Exception {
 		ListenableFuture<SendResult<String, String>> sent = template.send(Constants.TOPIC1, "foo");
 		SendResult<String, String> result = sent.get();
 
@@ -74,7 +71,7 @@ public class TracingKafkaListenerTest {
 	}
 
 	@Test
-	public void testExtraHeaderPropagated() throws Exception {
+	void testExtraHeaderPropagated() throws Exception {
 		String corporateTraceId = UUID.randomUUID().toString();
 		Message<String> message = MessageBuilder
 				.withPayload("bar")
@@ -88,7 +85,7 @@ public class TracingKafkaListenerTest {
 	}
 
 	@Test
-	public void testWebHeaderPropagated() throws Exception {
+	void testWebHeaderPropagated() throws Exception {
 		String corporateTraceId = UUID.randomUUID().toString();
 		restTemplate.exchange(RequestEntity.get(URI.create("/trace"))
 				.header(CORPORATE_TRACE_ID, corporateTraceId)
@@ -101,7 +98,7 @@ public class TracingKafkaListenerTest {
 	}
 
 	@Test
-	public void testMultiRecordsAllUniqueTraceIds() throws Exception {
+	void testMultiRecordsAllUniqueTraceIds() throws Exception {
 		int numberOfMessagesToSend = 100;
 		Map<String, String> sentMessageTraceIds = new HashMap<>();
 		for (int i = 0; i < numberOfMessagesToSend; i++) {
