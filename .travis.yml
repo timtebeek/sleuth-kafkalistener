@@ -1,4 +1,0 @@
-language: java
-jdk:
-  - openjdk15
-script: "./mvnw verify"
